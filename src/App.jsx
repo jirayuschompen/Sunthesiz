@@ -1,4 +1,4 @@
-    import React, {useState} from 'react';
+import React, {useState} from 'react';
     import { TrendingUp, AlertTriangle, Activity, Settings, Calendar, Package, Factory, Cpu, 
       Bell, ChevronRight, CheckCircle, XCircle, Clock, X, User, LogOut, Shield, 
       FileText, Loader, Check, Upload, Download, Cloud, Wind, Droplets, Gauge, 
@@ -70,8 +70,11 @@
     };
 
     // --- Dashboard Component ---
+    // Pages that are currently turned on. Add 'maintenance' / 'planning' / 'fleet' back here to re-enable them.
+    const ENABLED_TABS = ['overview', 'forecast'];
+
     const Dashboard = ({ onLogout }) => {
-      const [activeTab, setActiveTab] = useState('fleet');
+      const [activeTab, setActiveTab] = useState('overview');
       const [showNotifications, setShowNotifications] = useState(false);
       const [showUserMenu, setShowUserMenu] = useState(false);
       const [showForecastModal, setShowForecastModal] = useState(false);
@@ -183,6 +186,8 @@
           light: 'สว่าง',
           dark: 'มืด',
           overview: 'ภาพรวม',
+          selectPlant: 'เลือกโรงไฟฟ้า',
+          allPlants: 'ทุกโรง',
           demandForecasting: 'พยากรณ์ความต้องการ',
           productionPlanning: 'วางแผนการผลิต',
           predictiveMaintenance: 'การบำรุงรักษาเชิงคาดการณ์',
@@ -277,6 +282,8 @@
           light: 'Light',
           dark: 'Dark',
           overview: 'Overview',
+          selectPlant: 'Select Plant',
+          allPlants: 'All Plants',
           demandForecasting: 'Demand Forecasting',
           productionPlanning: 'Production Planning',
           predictiveMaintenance: 'Predictive Maintenance',
@@ -677,12 +684,6 @@
                 </div>
                 <div className="flex items-center gap-1 lg:gap-3">
 
-                  
-                  <button onClick={() => setActiveTab('fleet')}
-                    className={`p-2.5 rounded-full transition-all active:scale-95 ${theme === 'dark' ? 'hover:bg-slate-700 text-slate-300' : 'hover:bg-slate-100 text-slate-600'}`}>
-                      <Map className="w-5 h-5 lg:w-6 lg:h-6" />
-                  </button>
-
                   <div className="relative z-10">
                     <button 
                       onClick={() => { setShowNotifications(!showNotifications); setShowUserMenu(false); }}
@@ -795,7 +796,7 @@
                 { id: 'forecast',     label: currentLang.demandForecasting,    icon: TrendingUp },
                 { id: 'maintenance',  label: currentLang.predictiveMaintenance, icon: Settings  },
                 { id: 'planning',     label: currentLang.productionPlanning,   icon: Calendar  },
-              ].map((tab) => {
+              ].filter((tab) => ENABLED_TABS.includes(tab.id)).map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
                 return (
@@ -876,21 +877,15 @@
 
           {/* Main Content */}
           <main className="max-w-8xl mx-auto px-20 py-2">
-            {activeTab === 'fleet' && (
-            <div className="h-[calc(100vh-80px)] -mx-20 -mt-2">
-              <FleetOverviewPage
-                theme={theme}
-                onFleetDataUpdate={setFleetSummary}
-                onWeatherUpdate={setPlantWeather}
-                onPlantDataUpdate={setAllPlantsData} 
-                onEnterDashboard={(plantId, plantData) => {
-                  setSelectedPlantId(plantId);
-                  setSelectedPlantData(plantData);
-                  setActiveTab('overview');
-                }}
-              />
-            </div>
-          )}
+            {/* Fleet Map page is disabled. FleetOverviewPage stays mounted in headless mode (no UI)
+                only to feed plant / weather / fleet data to Overview. */}
+            <FleetOverviewPage
+              headless
+              theme={theme}
+              onFleetDataUpdate={setFleetSummary}
+              onWeatherUpdate={setPlantWeather}
+              onPlantDataUpdate={setAllPlantsData}
+            />
             {/* -- Overview Tab -- */}
             {activeTab === 'overview' && (
             <div className="space-y-8">
@@ -922,7 +917,7 @@
                 setAlertFilter={setAlertFilter}
                 filteredAlerts={filteredAlerts}
                 plantId={selectedPlantId}
-                activePlantData={selectedPlantData}
+                activePlantData={(selectedPlantId && allPlantsData.find(x => x.id === selectedPlantId)) || selectedPlantData}
                 fleetSummary={fleetSummary}
                 allPlantsData={allPlantsData}
                 onEnterDashboard={(plantId, plantData) => {     // ← เพิ่มบรรทัดนี้
@@ -960,7 +955,7 @@
             )}
 
             {/* --- Maintenance Tab --- */}
-            {activeTab === 'maintenance' && (
+            {activeTab === 'maintenance' && ENABLED_TABS.includes('maintenance') && (
               <Maintenance 
                 theme={theme}
                 currentLang={currentLang}
@@ -973,7 +968,7 @@
             )}
 
             {/* --- Planning Tab --- */}
-            {activeTab === 'planning' && (
+            {activeTab === 'planning' && ENABLED_TABS.includes('planning') && (
               <Planning 
                   theme={theme}
                   language={language}

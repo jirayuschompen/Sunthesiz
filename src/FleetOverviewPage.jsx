@@ -458,7 +458,7 @@ window.addEventListener('message', (e) => {
 // ═══════════════════════════════════════════════════════════════════════════
 // FleetOverviewPage Component
 // ═══════════════════════════════════════════════════════════════════════════
-const FleetOverviewPage = ({ theme, onEnterDashboard, onFleetDataUpdate, onWeatherUpdate, onPlantDataUpdate }) => {
+const FleetOverviewPage = ({ theme, onEnterDashboard, onFleetDataUpdate, onWeatherUpdate, onPlantDataUpdate, headless = false }) => {
   const dk  = theme === 'dark';
   const tx  = dk ? 'text-white'     : 'text-slate-800';
   const sub = dk ? 'text-slate-400' : 'text-slate-500';
@@ -651,6 +651,9 @@ const FleetOverviewPage = ({ theme, onEnterDashboard, onFleetDataUpdate, onWeath
   // [NEW] PR loss value helper
   const getCapacityMW = (plant) =>
     plant ? plant.capacity / 1000 : PLANTS.reduce((s, p) => s + p.capacity, 0) / 1000;
+
+  // headless: only compute/push plant + weather data up to the parent (used by Overview), render no UI
+  if (headless) return null;
 
   return (
     <>

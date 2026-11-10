@@ -500,6 +500,36 @@ const Overview = ({
   return (
     <div className="w-full space-y-2">
 
+      {/* ── Plant selector ── */}
+      {allPlantsData.length > 0 && (
+        <div className={`flex flex-wrap items-center gap-2 px-4 py-2.5 rounded-xl border ${
+          dk ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'
+        }`}>
+          <span className={`text-xs font-semibold mr-1 ${sub}`}>{currentLang.selectPlant ?? 'Select Plant'}:</span>
+          {[{ id: null, name: currentLang.allPlants ?? 'All Plants' }, ...allPlantsData].map((pl) => {
+            const active = (plantId ?? null) === pl.id;
+            const dot = pl.status === 'warning' ? '#f59e0b' : pl.status === 'offline' ? '#ef4444' : '#22c55e';
+            return (
+              <button
+                key={pl.id ?? 'all'}
+                onClick={() => {
+                  if (pl.id === null) { onBackToFleet && onBackToFleet(); }
+                  else { onEnterDashboard && onEnterDashboard(pl.id, pl); }
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                  active
+                    ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                    : (dk ? 'border-slate-600 text-slate-300 hover:bg-slate-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50')
+                }`}
+              >
+                {pl.id !== null && <span className="w-2 h-2 rounded-full" style={{ background: dot }} />}
+                {pl.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* ── Plant header bar ── */}
       {p && (
         <div className={`flex items-center justify-between px-4 py-2.5 rounded-xl border ${
