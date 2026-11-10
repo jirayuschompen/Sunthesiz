@@ -326,7 +326,12 @@ const WeatherFloatCard = ({ weather, plantName, theme }) => {
   );
 };
 
-// ── Build Leaflet HTML (unchanged) ───────────────────────────────────────────
+// ── Build Leaflet HTML ────────────────────────────────────────────────────────
+// [FIX] CARTO's dark_all tiles now require an API key (basemaps.cartocdn.com
+// started gating requests). We no longer call CARTO at all — we use the
+// free, key-less OpenStreetMap tile layer for both themes, and simulate the
+// dark look with a CSS filter on the tile pane. This removes the
+// "API KEY REQUIRED" watermark entirely and needs no signup/key.
 const buildMapHTML = (isDark, weatherMap = {}, powerMap = {}, irradianceMap = {}) => {
   const plantsJson = JSON.stringify(PLANTS.map(p => ({
     id: p.id, name: p.name, lat: p.lat, lng: p.lng,
@@ -356,6 +361,11 @@ const buildMapHTML = (isDark, weatherMap = {}, powerMap = {}, irradianceMap = {}
   .plant-marker.selected { box-shadow: 0 0 0 4px rgba(255,255,255,0.9), 0 0 0 7px rgba(255,255,255,0.3), 0 0 20px rgba(255,255,255,0.5) !important; border-width: 3px !important; }
   .leaflet-control-attribution { font-size:8px !important; }
   @keyframes ping { 0%{transform:scale(1);opacity:0.25} 70%{transform:scale(1.8);opacity:0} 100%{transform:scale(1.8);opacity:0} }
+  /* [FIX] Fake a dark basemap by inverting the free OSM raster tiles.
+     No external dark-tile service (and therefore no API key) required. */
+  ${isDark ? `
+  .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.9); }
+  ` : ''}
 </style>
 </head>
 <body>
@@ -366,9 +376,12 @@ const isDark = ${isDark};
 const map = L.map('map', { zoomControl: false, scrollWheelZoom: true });
 const bounds = L.latLngBounds(plants.map(p => [p.lat, p.lng]));
 map.fitBounds(bounds, { padding: [60, 60] });
+// [FIX] Always use the free, key-less OpenStreetMap tile layer.
+// Dark appearance is produced by the .leaflet-tile-pane CSS filter above,
+// not by requesting CARTO's key-gated dark_all tiles.
 L.tileLayer(
-  isDark ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-  { attribution: isDark ? '&copy; <a href="https://carto.com/">CARTO</a>' : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', maxZoom: 19 }
+  'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19 }
 ).addTo(map);
 const statusColor = (s) => s === 'online' ? '#22c55e' : s === 'warning' ? '#f59e0b' : '#ef4444';
 const markerMap = {};
@@ -394,6 +407,9 @@ function buildMarkerHtml(p) {
   const typeIcon = buildTypeIcon(p.type);
   const pingHtml = p.status === 'online' ? \`<div style="position:absolute;inset:0;border-radius:50%;background:\${col};opacity:0.2;animation:ping 1.5s infinite;pointer-events:none;z-index:1;"></div>\` : '';
   const bg = isDark ? 'rgba(2,6,23,0.92)' : 'rgba(10,18,38,0.86)';
+  // [FIX] Marker/chip colors are set explicitly below (col, bg, text colors)
+  // and must NOT be affected by the tile-pane's dark-mode invert filter —
+  // no filter is applied here on purpose.
   return \`<div style="display:inline-flex;align-items:center;gap:7px;pointer-events:none;">
     <div style="position:relative;width:40px;height:40px;flex-shrink:0;">
       \${pingHtml}
@@ -514,17 +530,19 @@ const FleetOverviewPage = ({ theme, onEnterDashboard, onFleetDataUpdate, onWeath
     );
 
     // [ENHANCED] Hourly data now includes theoretical kW and irradiance W/m²
+    // Hourly: actual (past) + forecast (future) + irradiance full day
     const powerHourly = Array.from({ length: 24 }, (_, h) => {
       const sinFrac  = h >= 6 && h <= 18 ? Math.sin(((h - 6) / 12) * Math.PI) : 0;
       const recorded = h <= curHour && h >= 6 && h <= 18;
-      const irrH     = recorded ? Math.round(950 * sinFrac) : null;
-      const theoreticalH = recorded ? Math.round(p.capacity * sinFrac) : null;
+      const isFuture = h > curHour && h >= 6 && h <= 18;
+      const irrH     = (recorded || isFuture) ? Math.round(950 * sinFrac) : null;
+      const forecastH = isFuture ? getHourlyKwh(dayYield, h) : null;
       const kwH = recorded
         ? (h === curHour
             ? Math.round(getHourlyKwh(dayYield, h) * (curMin / 60))
             : getHourlyKwh(dayYield, h))
         : null;
-      return { h, kw: kwH, theoretical: theoreticalH, irr: irrH };
+      return { h, kw: kwH, forecast: forecastH, irr: irrH };
     });
 
     return { ...p, power: powerNow, irradiance, dayYield, toNow, revenue, monthly, monthForecast, powerHourly };
@@ -664,11 +682,11 @@ const FleetOverviewPage = ({ theme, onEnterDashboard, onFleetDataUpdate, onWeath
               <span className="flex items-center gap-1 text-[8px] text-blue-400 font-semibold">
                 <span className="w-3 h-0.5 bg-blue-400 inline-block rounded"/>Actual
               </span>
-              <span className="flex items-center gap-1 text-[8px] text-slate-400 font-semibold">
-                <span className="w-3 h-0.5 bg-slate-400 inline-block rounded" style={{ borderTop: '1.5px dashed #94a3b8', background: 'none' }}/>Theoretical
+              <span className="flex items-center gap-1 text-[8px] text-blue-300 font-semibold">
+                <span className="w-3 inline-block" style={{ borderTop: '1.5px dashed #93c5fd', display: 'inline-block' }}/>Forecast
               </span>
               <span className="flex items-center gap-1 text-[8px] text-amber-400 font-semibold">
-                <span className="w-3 h-0.5 inline-block rounded" style={{ borderTop: '1.5px dashed #f59e0b', background: 'none' }}/>Irr W/m²
+                <span className="w-3 inline-block" style={{ borderTop: '1.5px dashed #f59e0b', display: 'inline-block' }}/>Irr W/m²
               </span>
             </div>
 
@@ -697,11 +715,12 @@ const FleetOverviewPage = ({ theme, onEnterDashboard, onFleetDataUpdate, onWeath
                     return [`${v} kW`, n];
                   }}
                 />
-                {/* Theoretical (gray dashed area — sits behind actual) */}
+                {/* Forecast (dashed blue area) */}
                 <Area
-                  yAxisId="left" type="monotone" dataKey="theoretical"
-                  name="Theoretical" stroke="#94a3b8" fill="url(#thG)"
-                  strokeWidth={1} strokeDasharray="4 2" dot={false} connectNulls={false}
+                  yAxisId="left" type="monotone" dataKey="forecast"
+                  name="Forecast" stroke="#93c5fd" fill="url(#pwG)"
+                  strokeWidth={1.5} strokeDasharray="5 3" dot={false}
+                  connectNulls={false} opacity={0.6}
                 />
                 {/* Actual (solid blue area) */}
                 <Area
